@@ -1,0 +1,19 @@
+{
+  "name": "梦深时见",
+  "short_name": "梦深时见",
+  "description": "梦深时见 · 个人工作台：计划、待办、物料、资料、记账、创作，一台手机一个入口",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#e9def4",
+  "theme_color": "#d6cdf3",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

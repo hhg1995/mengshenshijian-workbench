@@ -530,32 +530,53 @@ details.lib .body{font-size:14px;color:var(--text);white-space:pre-wrap;line-hei
           <p class="hint" style="margin-top:0">
             开启后手机和电脑登同一个账号，记的东西自动对齐。<br>
             <b>数据会在你的设备和云端各存一份</b>，本地那份始终在，断网照样能记。<br>
-            云端那份是明文的——只有知道你密码的人能读，但平台运维理论上能看到。<br>
-            <b>密码忘了就进不去了，没有找回功能。</b><br>
+            云端那份是明文的——只有登录你账号的人能读。<br>
+            忘了密码可以用邮箱找回。<br>
             创作本和生活记录不上云，只留在各设备本地。
           </p>
-          <div style="margin-top:14px">
-            <input type="text" id="syncUser" placeholder="用户名（3-32 个字符，只用来定位你的数据）" autocomplete="username">
+          <div id="syncLogin" style="margin-top:14px">
+            <div style="margin-top:10px">
+              <input type="email" id="syncEmail" placeholder="邮箱" autocomplete="email">
+            </div>
+            <div style="margin-top:10px">
+              <input type="password" id="syncPass" placeholder="密码（至少 8 位）" autocomplete="current-password">
+            </div>
+            <div class="row" style="margin-top:14px">
+              <button class="btn" onclick="Settings.syncSignIn()">登录并开启同步</button>
+              <button class="btn ghost" onclick="Settings.syncMode('reg')">没有账号？注册</button>
+            </div>
+            <p class="hint">
+              <a href="javascript:void(0)" onclick="Settings.syncForgot()">忘记密码？</a>
+              &nbsp;·&nbsp;建议先<a href="javascript:void(0)" onclick="Store.exportFile()">导出一份备份</a>再开启
+            </p>
           </div>
-          <div style="margin-top:10px">
-            <input type="password" id="syncPass" placeholder="密码（至少 8 位）" autocomplete="new-password">
+          <div id="syncReg" style="display:none;margin-top:14px">
+            <div style="margin-top:10px">
+              <input type="email" id="regEmail" placeholder="邮箱" autocomplete="email">
+            </div>
+            <div style="margin-top:10px;display:flex;gap:8px">
+              <input type="text" id="regCode" placeholder="邮箱验证码" style="flex:1" autocomplete="one-time-code">
+              <button class="btn ghost" id="regSendBtn" onclick="Settings.syncSendCode()">发送验证码</button>
+            </div>
+            <div style="margin-top:10px">
+              <input type="password" id="regPass" placeholder="设置密码（至少 8 位）" autocomplete="new-password">
+            </div>
+            <div class="row" style="margin-top:14px">
+              <button class="btn" onclick="Settings.syncRegister()">注册并开启同步</button>
+              <button class="btn ghost" onclick="Settings.syncMode('login')">已有账号？登录</button>
+            </div>
+            <p class="hint">验证码发到你的邮箱，几分钟内会到；没收到翻翻垃圾邮件。</p>
           </div>
-          <div class="row" style="margin-top:14px">
-            <button class="btn" onclick="Settings.enableSync()">开启同步</button>
-            <button class="btn ghost" onclick="Store.exportFile()">先导出备份</button>
-          </div>
-          <p class="hint">建议先导出一份备份再开——万一以后忘了密码，本地这份还在。</p>
         </div>
         <div id="syncOn" style="display:none">
           <p class="hint" style="margin-top:0">账号：<b id="syncWho" class="mono"></b><br>上次同步：<span id="syncTime"></span></p>
           <div class="row" style="margin-top:14px">
             <button class="btn" onclick="Sync.pull(true)">立即同步</button>
             <button class="btn ghost" onclick="Settings.changePass()">改密码</button>
-            <button class="btn ghost" onclick="Sync.disable()">关闭同步</button>
+            <button class="btn ghost" onclick="Sync.disable()">退出登录</button>
           </div>
           <p class="hint">
-            刚在另一台设备改的东西，这边最多等一分钟才看得到（云端缓存机制），
-            等不及就点「立即同步」。
+            刚在另一台设备改的东西，这边打开时会自动拉取；等不及就点「立即同步」。
           </p>
         </div>
       </div>
@@ -995,14 +1016,54 @@ const Settings = {
     UI.toast('已恢复默认背景');
   },
 
-  enableSync(){
-    Sync.enable(document.getElementById('syncUser').value,
-                document.getElementById('syncPass').value);
+  syncMode(m){
+    document.getElementById('syncLogin').style.display = m === 'login' ? 'block' : 'none';
+    document.getElementById('syncReg').style.display   = m === 'reg'   ? 'block' : 'none';
+  },
+
+  async syncSignIn(){
+    const email = document.getElementById('syncEmail').value.trim();
+    const pass  = document.getElementById('syncPass').value;
+    if (!email) return UI.toast('先填邮箱');
+    if (pass.length < 8) return UI.toast('密码至少 8 位');
+    await Sync.signIn(email, pass);
+  },
+
+  async syncSendCode(){
+    const email = document.getElementById('regEmail').value.trim();
+    if (!email) return UI.toast('先填邮箱');
+    const btn = document.getElementById('regSendBtn');
+    btn.disabled = true;
+    try {
+      await Sync.sendCode(email);
+      UI.toast('验证码已发送，去邮箱看看');
+    } catch(e){ UI.toast(e.message); }
+    finally { btn.disabled = false; }
+  },
+
+  async syncRegister(){
+    const email = document.getElementById('regEmail').value.trim();
+    const code  = document.getElementById('regCode').value.trim();
+    const pass  = document.getElementById('regPass').value;
+    if (!email || !code) return UI.toast('邮箱和验证码都要填');
+    if (pass.length < 8) return UI.toast('密码至少 8 位');
+    await Sync.register(email, code, pass);
+  },
+
+  async syncForgot(){
+    const email = prompt('输入注册时的邮箱，会收到一封找回密码的邮件：');
+    if (!email) return;
+    try {
+      await Sync.forgot(email.trim());
+      UI.toast('邮件已发，去邮箱按提示重置密码');
+    } catch(e){ UI.toast(e.message); }
   },
 
   changePass(){
+    const old = prompt('输入当前密码');
+    if (!old) return;
     const np = prompt('输入新密码（至少 8 位）');
-    if (np) Sync.changePass(np);
+    if (np) Sync.changePass(old, np);
   },
 
   renderSync(){
@@ -1041,58 +1102,131 @@ const Sync = {
   DEBOUNCE: 4000,
   _timer: null,
   _busy: false,
+  _cloud: null,
+  _row: null,          // 云端同步行缓存 { id, data }
+  _pending: null,      // 注册验证码信息 { email, verificationId, isExistingUser }
+
+  PUBLIC: {
+    endpoint: 'https://mengshen-workbench.app.workbuddy.host',
+    publishableKey: 'wbpk_O6OQQTxA78p6zhzHX7LIAb_vrQGg5EmCyAxDG2RGfkk9Kj8cKxbInX6'
+  },
+
+  cloud(){
+    if (!this._cloud && window.WorkBuddyCloud)
+      this._cloud = WorkBuddyCloud.createWorkBuddyCloud(this.PUBLIC);
+    return this._cloud;
+  },
 
   cfg(){ return Store.get('_sync', { on:false, user:'' }); },
   on(){ return !!this.cfg().on; },
-  pass(){ return Store.getSecret('syncPass') || ''; },
 
-  async call(action, extra = {}){
-    const c = this.cfg();
-    const r = await fetch('/api/sync', {
-      method:'POST',
-      headers:{ 'content-type':'application/json' },
-      body: JSON.stringify(Object.assign({ action, user:c.user, pass:this.pass() }, extra))
-    });
-    const j = await r.json().catch(() => ({ error:'返回格式不对' }));
-    if (!r.ok) throw new Error(j.error || ('请求失败 ' + r.status));
-    return j;
+  async ensureSession(){
+    const cloud = this.cloud();
+    if (!cloud) throw new Error('云组件还在加载，稍等几秒再试');
+    const { data: session, error } = await cloud.auth.getSession();
+    if (error || !session) throw new Error('NO_SESSION');
+    return session;
   },
 
-  /** 开启同步：首次会把这个用户名注册下来 */
-  async enable(user, pass){
-    user = (user || '').trim().toLowerCase();
-    if (user.length < 3) return UI.toast('用户名至少 3 个字符');
-    if ((pass || '').length < 8) return UI.toast('密码至少 8 位');
-    Store.set('_sync', { on:true, user });
-    Store.setSecret('syncPass', pass);
+  /* ---- 登录 / 注册 / 找回 ---- */
+  async signIn(email, pass){
+    const cloud = this.cloud();
+    if (!cloud) return UI.toast('云组件还在加载，稍等几秒再试');
+    const r = await cloud.auth.signInWithPassword({ email, password: pass });
+    if (r.error) return UI.toast(r.error.message || '登录失败');
+    await this.afterAuth(email);
+  },
+
+  async sendCode(email){
+    const cloud = this.cloud();
+    if (!cloud) throw new Error('云组件还在加载，稍等几秒再试');
+    const sent = await cloud.auth.sendOtp({ email });
+    if (sent.error) throw new Error(sent.error.message || '验证码发送失败');
+    this._pending = {
+      email,
+      verificationId: sent.data.verificationId,
+      isExistingUser: sent.data.isExistingUser
+    };
+  },
+
+  async register(email, code, pass){
+    const cloud = this.cloud();
+    if (!cloud) return UI.toast('云组件还在加载，稍等几秒再试');
+    if (!this._pending || this._pending.email !== email)
+      return UI.toast('先点「发送验证码」，收到后再提交');
+    const done = await cloud.auth.verifyOtp({
+      email,
+      verificationId: this._pending.verificationId,
+      isExistingUser: this._pending.isExistingUser,
+      token: code,
+      password: this._pending.isExistingUser ? undefined : pass
+    });
+    if (done.error) return UI.toast(done.error.message || '注册失败');
+    this._pending = null;
+    await this.afterAuth(email);
+  },
+
+  async forgot(email){
+    const cloud = this.cloud();
+    if (!cloud) throw new Error('云组件还在加载，稍等几秒再试');
+    const r = await cloud.auth.resetPasswordForEmail(email);
+    if (r.error) throw new Error(r.error.message || '发送失败');
+  },
+
+  async changePass(oldPass, newPass){
+    if ((newPass || '').length < 8) return UI.toast('新密码至少 8 位');
+    const cloud = this.cloud();
+    if (!cloud) return UI.toast('云组件还在加载，稍等几秒再试');
+    const r = await cloud.auth.resetPasswordForOld({ oldPassword: oldPass, newPassword: newPass });
+    if (r.error) return UI.toast(r.error.message || '改密码失败');
+    UI.toast('密码已改');
+  },
+
+  /** 登录/注册成功后：建同步配置 → 拉云端合并 → 推送 */
+  async afterAuth(email){
+    Store.set('_sync', { on:true, user: email });
     try {
-      const j = await this.call('push', { data: Store.dumpSync() });   // push 兼注册
-      if (j.data) Store.mergeRemote(j.data);
+      const row = await this.pullRow();
+      if (row && row.data) Store.mergeRemote(row.data);
+      await this.pushRow();
       Store.set('_syncAt', Date.now());
-      UI.toast(j.created ? '同步已开启' : '已连上，数据已合并');
-      setTimeout(() => location.reload(), 900);
-    } catch(e){
-      Store.set('_sync', { on:false, user:'' });
-      Store.setSecret('syncPass', '');
-      UI.toast(e.message);
+      UI.toast('同步已开启，数据已对齐');
+    } catch(e){ UI.toast('登录成功，但首次同步失败：' + e.message); }
+    setTimeout(() => location.reload(), 900);
+  },
+
+  /* ---- 云端行读写 ---- */
+  async pullRow(){
+    const cloud = this.cloud();
+    const { data, error } = await cloud.database.from('sync_store').select('id, data').limit(1);
+    if (error) throw new Error(error.message || '云端读取失败');
+    this._row = data && data.length ? data[0] : null;
+    return this._row;
+  },
+
+  async pushRow(){
+    const cloud = this.cloud();
+    const payload = { data: Store.dumpSync(), updated_at: new Date().toISOString() };
+    if (this._row && this._row.id){
+      const { data, error } = await cloud.database.from('sync_store')
+        .update(payload).eq('id', this._row.id).select();
+      if (error) throw new Error(error.message);
+      if (!data || !data.length) throw new Error('云端写入被拒绝');
+    } else {
+      const { data, error } = await cloud.database.from('sync_store').insert(payload).select();
+      if (error) throw new Error(error.message);
+      this._row = data && data[0];
     }
   },
 
   disable(){
-    if (!confirm('关闭同步？本地数据一条不会少，只是不再和云端对齐。')) return;
+    if (!confirm('退出登录并关闭同步？本地数据一条不会少，只是不再和云端对齐。')) return;
+    const cloud = this.cloud();
+    if (cloud) cloud.auth.signOut().catch(() => {});
     Store.set('_sync', { on:false, user:'' });
-    Store.setSecret('syncPass', '');
-    UI.toast('已关闭同步');
-    Settings.render();
-  },
-
-  async changePass(np){
-    if ((np || '').length < 8) return UI.toast('新密码至少 8 位');
-    try {
-      await this.call('chpass', { newPass: np });
-      Store.setSecret('syncPass', np);
-      UI.toast('密码已改');
-    } catch(e){ UI.toast(e.message); }
+    this._row = null;
+    UI.toast('已退出登录');
+    Settings.renderSync();
   },
 
   /** 拉取并合并。失败一律静默降级——本地数据才是主的 */
@@ -1101,15 +1235,16 @@ const Sync = {
     this._busy = true;
     this.status('同步中');
     try {
-      const j = await this.call('pull');
-      const n = Store.mergeRemote(j.data || {});
+      await this.ensureSession();
+      const row = await this.pullRow();
+      const n = row && row.data ? Store.mergeRemote(row.data) : 0;
       Store.set('_syncAt', Date.now());
       this.status('已同步');
       if (n) { if (loud) UI.toast('拉到 ' + n + ' 处更新'); App.refresh(); }
       else if (loud) UI.toast('已是最新');
     } catch(e){
       this.status('未同步');
-      if (loud) UI.toast(e.message.includes('NO_ACCOUNT') ? '云端还没有数据' : e.message);
+      if (loud) UI.toast(e.message === 'NO_SESSION' ? '登录已过期，到设置页重新登录' : e.message);
     } finally { this._busy = false; }
   },
 
@@ -1125,8 +1260,10 @@ const Sync = {
     this._busy = true;
     this.status('同步中');
     try {
-      const j = await this.call('push', { data: Store.dumpSync() });
-      if (j.data) Store.mergeRemote(j.data);
+      await this.ensureSession();
+      await this.pullRow();                       // 先拉，防覆盖另一端的改动
+      if (this._row && this._row.data) Store.mergeRemote(this._row.data);
+      await this.pushRow();
       Store.set('_syncAt', Date.now());
       this.status('已同步');
     } catch(e){
